@@ -7,3 +7,5 @@ Se devuelve un JSON con los campos:
 - email
 - telefono
 
+En caso de que alguna de esas propiedades no se encuentren en el archivo entregado, no serán partes del JSON de salida
+
