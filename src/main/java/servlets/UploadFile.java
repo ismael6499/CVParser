@@ -118,7 +118,7 @@ public class UploadFile extends HttpServlet {
 
     private void analizarLineas(HashSet<String> palabrasResultado, String[] lineas) {
         for (String linea : lineas) {
-            String[] palabras = linea.split(" ");
+            String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ]");
             for (String palabra : palabras) {
                 if (variablesCompletas()) return;
                 if (!TextUtils.isBlank(palabra) && palabra.length() > 3) {
@@ -232,7 +232,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private String[] getLineasFromResult(String resultFromFile) {
-        return resultFromFile.split("\n");
+        return resultFromFile.split("[\n\r]");
     }
 
     private String getTextFromFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
