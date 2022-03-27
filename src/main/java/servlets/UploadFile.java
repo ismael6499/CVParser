@@ -74,6 +74,9 @@ public class UploadFile extends HttpServlet {
         }
         dataFinder = DataFinder.getInstance();
 
+        if (emailSaved == null) {
+            buscarEmail(resultFromFile);
+        }
         HashSet<String> palabrasResultado = new HashSet<>();
         String[] lineas = getLineasFromResult(resultFromFile);
         lineas = ordenarLineasPorTags(lineas);
@@ -102,7 +105,7 @@ public class UploadFile extends HttpServlet {
         List<Integer> indexes = new ArrayList<>();
         for (int i = 0; i < lineas.length; i++) {
             String linea = lineas[i];
-            if(linea.toLowerCase().contains("nombre") || linea.toLowerCase().contains("apellido")){
+            if (linea.toLowerCase().contains("nombre") || linea.toLowerCase().contains("apellido")) {
                 indexes.add(i);
             }
         }
@@ -118,7 +121,7 @@ public class UploadFile extends HttpServlet {
 
     private void analizarLineas(HashSet<String> palabrasResultado, String[] lineas) {
         for (String linea : lineas) {
-            String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ]");
+            String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ@.+∙-]");
             for (String palabra : palabras) {
                 if (variablesCompletas()) return;
                 if (!TextUtils.isBlank(palabra) && palabra.length() > 3) {
@@ -133,14 +136,9 @@ public class UploadFile extends HttpServlet {
                             }
                         }
 
-                        if (emailSaved == null) {
-                            if (buscarEmail(palabra)) {
-                                continue;
-                            }
-                        }
-
                         if (telefonoSaved == null && !palabra.replaceAll("\\D", "").isEmpty()) {
-                            buscarTelefono(Arrays.stream(palabras).reduce("", (s, s2) -> s + s2).replaceAll("\\D", ""));
+                            String palabraTelefono = Arrays.stream(palabras).reduce("", (s, s2) -> s + s2);
+                            buscarTelefono(palabraTelefono);
                         }
                     }
 
@@ -185,23 +183,25 @@ public class UploadFile extends HttpServlet {
     }
 
     private void buscarTelefono(String palabra) {
-        boolean validate = PhoneFinder.validate(palabra);
-        if (validate) {
-            telefonoSaved = palabra;
+        String phoneNumber = PhoneFinder.find(palabra);
+        if (!TextUtils.isBlank(phoneNumber)) {
+            telefonoSaved = phoneNumber;
         }
     }
 
     private boolean buscarEmail(String palabra) {
-        boolean validate = EmailFinder.validate(palabra);
-        if (validate) {
-            emailSaved = palabra;
+        String email = EmailFinder.find(palabra);
+        if (!TextUtils.isBlank(email)) {
+            emailSaved = email;
+            return true;
         }
-        return validate;
+        return false;
     }
 
     private void buscarSegundoNombre(String palabra) {
-        if (dataFinder.existeNombre(palabra.toUpperCase())) {
-            String nombreFormateado = TextUtilCustom.formatToName(palabra);
+        String texto = dataFinder.existeNombre(palabra);
+        if (!TextUtils.isBlank(texto)) {
+            String nombreFormateado = TextUtilCustom.formatToName(texto);
             if (!nombreFormateado.equals(apellidoSaved)) {
                 this.nombreSegundoSaved = nombreFormateado;
             }
@@ -209,8 +209,9 @@ public class UploadFile extends HttpServlet {
     }
 
     private boolean buscarNombre(String palabra) {
-        if (dataFinder.existeNombre(palabra.toUpperCase())) {
-            String nombreFormateado = TextUtilCustom.formatToName(palabra);
+        String texto = dataFinder.existeNombre(palabra);
+        if (!TextUtils.isBlank(texto)) {
+            String nombreFormateado = TextUtilCustom.formatToName(texto);
             if (!nombreFormateado.equals(apellidoSaved)) {
                 this.nombreSaved = nombreFormateado;
             }
@@ -220,8 +221,9 @@ public class UploadFile extends HttpServlet {
 
     private boolean buscarApellido(String palabra) {
         if (apellidoSaved == null) {
-            if (dataFinder.existeApellido(palabra.toUpperCase())) {
-                String apellidoFormateado = TextUtilCustom.formatToName(palabra);
+            String texto = dataFinder.existeApellido(palabra);
+            if (!TextUtils.isBlank(texto)) {
+                String apellidoFormateado = TextUtilCustom.formatToName(texto);
                 if (!apellidoFormateado.equals(nombreSaved) && !apellidoFormateado.equals(nombreSegundoSaved)) {
                     this.apellidoSaved = apellidoFormateado;
                 }

@@ -69,14 +69,22 @@ public class DataFinder {
     }
 
 
-    public boolean existeApellido(String palabra) {
-        return !apellidos.isEmpty() && apellidos.contains(palabra);
+    public String existeApellido(String palabra) {
+        palabra = palabra.replaceAll("[^a-zA-ZÀ-ÿ ]", "");
+        if (!apellidos.isEmpty() && apellidos.contains(palabra.toUpperCase())) {
+            return palabra;
+        }
+        return "";
     }
 
-    public boolean existeNombre(String palabra) {
-        if (!nombresFemeninos.isEmpty()) if(nombresFemeninos.contains(palabra)) return true;
-        if (!nombresMasculinos.isEmpty()) return nombresMasculinos.contains(palabra);
-        return false;
-
+    public String existeNombre(String palabra) {
+        palabra = palabra.replaceAll("[^a-zA-ZÀ-ÿ ]", "");
+        boolean encontrado = false;
+        if (!nombresFemeninos.isEmpty()) if (nombresFemeninos.contains(palabra.toUpperCase())) encontrado = true;
+        if (!nombresMasculinos.isEmpty() && !encontrado) encontrado = nombresMasculinos.contains(palabra.toUpperCase());
+        if (encontrado) {
+            return palabra;
+        }
+        return "";
     }
 }
