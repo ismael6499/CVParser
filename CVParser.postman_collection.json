@@ -1,0 +1,48 @@
+{
+	"info": {
+		"_postman_id": "29ec854e-055a-4195-8d0b-6558ebfe1ce4",
+		"name": "CV Parser",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "CV Parser",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "multipart/form-data",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/C:/Users/user/Documents/CVs/CV-Example.pdf"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://34.238.241.14:8080/apiparseo/UploadFile",
+					"protocol": "http",
+					"host": [
+						"34",
+						"238",
+						"241",
+						"14"
+					],
+					"port": "8080",
+					"path": [
+						"apiparseo",
+						"UploadFile"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
