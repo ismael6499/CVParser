@@ -2,15 +2,18 @@
 package servlets;
 
 import datasets.DataFinder;
+import datasets.NameObject;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.fileupload.FileItemFactory;
 import org.apache.commons.fileupload.disk.DiskFileItemFactory;
 import org.apache.commons.fileupload.servlet.ServletFileUpload;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.http.util.TextUtils;
 import org.apache.tika.metadata.Metadata;
 import org.apache.tika.parser.AutoDetectParser;
-import org.apache.tika.sax.BodyContentHandler;
+import org.apache.tika.sax.ToXMLContentHandler;
 import org.json.JSONObject;
+import org.xml.sax.ContentHandler;
 import utils.EmailFinder;
 import utils.PhoneFinder;
 import utils.TextUtilCustom;
@@ -30,9 +33,9 @@ public class UploadFile extends HttpServlet {
 
     private DataFinder dataFinder;
 
-    private String apellidoSaved;
-    private String nombreSaved;
-    private String nombreSegundoSaved;
+    public HashMap<String, NameObject> posiblesNombres = new HashMap<>();
+    public HashMap<String, NameObject> posiblesApellidos = new HashMap<>();
+
     private String telefonoSaved;
     private String emailSaved;
 
@@ -60,9 +63,8 @@ public class UploadFile extends HttpServlet {
     }
 
     private void resetCampos() {
-        apellidoSaved = null;
-        nombreSaved = null;
-        nombreSegundoSaved = null;
+        posiblesNombres.clear();
+        posiblesApellidos.clear();
         telefonoSaved = null;
         emailSaved = null;
     }
@@ -78,19 +80,20 @@ public class UploadFile extends HttpServlet {
             buscarEmail(resultFromFile);
         }
         HashSet<String> palabrasResultado = new HashSet<>();
-        String[] lineas = getLineasFromResult(resultFromFile);
+        List<String> lineas = getLineasFromResult(resultFromFile);
+        lineas = limpiarLineas(lineas);
+        lineas = limpiarLineasHtml(lineas);
         lineas = ordenarLineasPorTags(lineas);
         analizarLineas(palabrasResultado, lineas);
 
         JSONObject jsonObject = new JSONObject();
+        String apellidoSaved = buscarMaximaFrecuencia(posiblesApellidos);
         if (!TextUtils.isBlank(apellidoSaved)) {
             jsonObject.put("apellido", apellidoSaved);
         }
+        String nombreSaved = buscarMaximaFrecuencia(posiblesNombres);
         if (!TextUtils.isBlank(nombreSaved)) {
             jsonObject.put("nombre", nombreSaved);
-        }
-        if (!TextUtils.isBlank(nombreSegundoSaved)) {
-            jsonObject.put("nombreSegundo", nombreSegundoSaved);
         }
         if (!TextUtils.isBlank(telefonoSaved)) {
             jsonObject.put("telefono", telefonoSaved);
@@ -101,45 +104,76 @@ public class UploadFile extends HttpServlet {
         response.getWriter().println(jsonObject);
     }
 
-    private String[] ordenarLineasPorTags(String[] lineas) {
+    private List<String> limpiarLineasHtml(List<String> lineas) {
+        return lineas.stream().map(s -> s.replaceAll("^<meta name.*/>$","").replaceAll("<[/]?body>","").replaceAll("<[/]?b>","").replaceAll("<img src=.*","")).collect(Collectors.toList());
+    }
+
+    private List<String> limpiarLineas(List<String> lineas) {
+        return lineas.stream().filter(s -> !s.contains("<p/>") || !s.contains("<p>") || !TextUtils.isBlank(s)).collect(Collectors.toList());
+    }
+
+    private String buscarMaximaFrecuencia(HashMap<String, NameObject> listaNameObjects) {
+        long avgFreq = 0;
+        for (NameObject nameObject : listaNameObjects.values()) {
+            avgFreq += nameObject.getFrequency();
+        }
+        if(!listaNameObjects.isEmpty()){
+            avgFreq /= listaNameObjects.size();
+        }
+        for (String key : listaNameObjects.keySet()) {
+            NameObject nameObject = listaNameObjects.get(key);
+            if (nameObject.isCreadoDefault()) {
+                nameObject.setFrequency(avgFreq);
+                listaNameObjects.put(key,nameObject);
+            }
+        }
+        return listaNameObjects.values().stream().max(Comparator.comparingLong(NameObject::getTotalFrequency)).orElse(new NameObject("", 0)).getData();
+    }
+
+    private List<String> ordenarLineasPorTags(List<String> lineas) {
         List<Integer> indexes = new ArrayList<>();
-        for (int i = 0; i < lineas.length; i++) {
-            String linea = lineas[i];
-            if (linea.toLowerCase().contains("nombre") || linea.toLowerCase().contains("apellido")) {
+        for (int i = 0; i < lineas.size(); i++) {
+            String linea = lineas.get(i);
+            if (contieneTagsDatosPersonales(linea)) {
                 indexes.add(i);
             }
         }
         LinkedHashSet<String> lineasOrdenadas = new LinkedHashSet<>();
         for (Integer index : indexes) {
-            String linea = lineas[index];
+            String linea = lineas.get(index);
             lineasOrdenadas.add(linea);
         }
-        lineasOrdenadas.addAll(Arrays.asList(lineas));
-        return lineasOrdenadas.toArray(new String[0]);
+        lineasOrdenadas.addAll(lineas);
+        return new ArrayList(lineasOrdenadas);
+    }
+
+    private boolean contieneTagsDatosPersonales(String linea) {
+        String lineaLower = linea.toLowerCase();
+        return lineaLower.contains("nombre") || lineaLower.contains("apellido") || lineaLower.contains("personales");
     }
 
 
-    private void analizarLineas(HashSet<String> palabrasResultado, String[] lineas) {
-        for (String linea : lineas) {
-            String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ@.+∙-]");
+    private void analizarLineas(HashSet<String> palabrasResultado, List<String> lineas) {
+        for (int i = 0; i < lineas.size(); i++) {
+            String linea = lineas.get(i);
+            HashSet<NameObject> nameObjectHashSet = new HashSet<>();
+            String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ@.#+∙-]");
             for (String palabra : palabras) {
-                if (variablesCompletas()) return;
-                if (!TextUtils.isBlank(palabra) && palabra.length() > 3) {
+                if (telefonoSaved == null && !palabra.replaceAll("\\D", "").isEmpty()) {
+                    String palabraTelefono = Arrays.stream(palabras).reduce("", (s, s2) -> s + s2);
+                    buscarTelefono(palabraTelefono);
+                }
+                if (!TextUtils.isBlank(palabra) && palabra.length() > 3 && !ignorarTags(linea) && linea.replaceAll("[^0-9]", "").length() < 3) {
                     palabra = removeTextSymbol(palabra);
-                    if (!palabrasResultado.contains(palabra.toUpperCase())) {
+                    if (!palabrasResultado.contains(palabra.toUpperCase()) && !contieneSimbolosNombre(palabra)) {
                         palabrasResultado.add(palabra.toUpperCase());
-                        if (buscarNombres(palabras, palabra)) continue;
-
-                        if (apellidoSaved == null) {
-                            if (buscarApellido(palabra)) {
-                                continue;
+                        if (i < lineas.size() - 1) {
+                            String[] tempPalabras = Arrays.stream((linea + " " + lineas.get(i + 1)).split("[^\\wÀ-úÀ-ÿ@.#+∙-]")).filter(s -> !TextUtils.isBlank(s.replaceAll("^\\w", ""))).toArray(String[]::new);
+                            if (tempPalabras.length <= 4) {
+                                palabras = tempPalabras;
                             }
                         }
-
-                        if (telefonoSaved == null && !palabra.replaceAll("\\D", "").isEmpty()) {
-                            String palabraTelefono = Arrays.stream(palabras).reduce("", (s, s2) -> s + s2);
-                            buscarTelefono(palabraTelefono);
-                        }
+                        buscarNombres(palabras, palabra, nameObjectHashSet);
                     }
 
                 }
@@ -147,40 +181,76 @@ public class UploadFile extends HttpServlet {
         }
     }
 
-    private boolean buscarNombres(String[] palabras, String palabra) {
-        List<String> lista = Arrays.stream(palabras).collect(Collectors.toList());
-        int index = lista.indexOf(palabra);
-        if (index > 1) {
-            lista = lista.subList(0, index);
-            for (String text : lista) {
-                if (text.toUpperCase().contains("APELLIDO")) {
-                    return false;
-                }
-            }
+    private boolean contieneSimbolosNombre(String palabra) {
+        return !TextUtils.isBlank(palabra.replaceAll("[a-zA-ZÀ-ÿ, ]", ""));
+    }
+
+    String[] TAGS_IGNORAR = {"de vida", "hoja de vida", "de nacimiento", "fecha de nacimiento",
+            " de identidad", "documento de", "ciudad", "direccion", "estado civil",
+            "19", "20", "año", "mes", "argentina", "colombia", "mexico","salud","instituto","escuela","tecnica","facultad","edificio","universidad","ingles","español","espanol","spanish","english","idioma","lenguaje","language"};
+
+    private boolean ignorarTags(String linea) {
+        for (String tag : TAGS_IGNORAR) {
+            if (quitarLetrasEspeciales(linea.toLowerCase()).contains(tag)) return true;
         }
-        if (nombreSaved == null) {
-            if (buscarNombre(palabra) && !palabra.equals(apellidoSaved)) {
-                for (String nombreSegundo : palabras) {
-                    if (!nombreSegundo.equals(palabra)) {
-                        buscarApellido(palabra);
-                        if (nombreSegundoSaved == null && !palabra.equals(apellidoSaved)) {
-                            buscarSegundoNombre(nombreSegundo);
+        return false;
+    }
+
+    private void buscarNombres(String[] palabras, String palabra, HashSet<NameObject> nameObjectHashSet) {
+        palabra = quitarLetrasEspeciales(palabra);
+        if (buscarNombre(palabra, nameObjectHashSet) && !listaContiene(posiblesApellidos, palabra)) {
+            palabras = filtrarTagsNombres(palabras);
+            if(StringUtils.isAllUpperCase(palabra)){
+                palabras = Arrays.stream(palabras).filter(s -> StringUtils.isAllUpperCase(s)).toArray(String[]::new);
+            }
+            if(palabras.length > 5){
+                palabras = Arrays.stream(palabras).limit(5).toArray(String[]::new);
+            }
+            for (String palabraIter : palabras) {
+                palabraIter = quitarLetrasEspeciales(palabraIter);
+                if (!palabraIter.equals(palabra)) {
+                    boolean esNombre = buscarNombre(palabraIter, nameObjectHashSet) && !listaContiene(posiblesApellidos, palabraIter);
+                    if (buscarApellido(palabraIter, nameObjectHashSet,esNombre)) {
+                        if (palabraIter.length() > 3 && !esNombre) {
+                            addApellido(palabraIter, nameObjectHashSet);
                         }
                     }
                 }
-                return true;
             }
         }
-        return false;
+    }
+
+    private String[] filtrarTagsNombres(String[] palabras) {
+        return Arrays.stream(palabras).filter(s -> !StringUtils.equalsAny(s.toLowerCase(),"nombre","class","apellido","soy","yo","apellidos","nombres") && s.replaceAll("\\D","").isEmpty() && s.length() >= 3 ).toArray(String[]::new);
+    }
+
+    private String quitarLetrasEspeciales(String palabra) {
+        return StringUtils.stripAccents(palabra);
+    }
+
+    private void addApellido(String palabra, HashSet<NameObject> nameObjectHashSet) {
+        long defaultFrequency = nameObjectHashSet.stream().min(Comparator.comparingLong(NameObject::getFrequency)).orElse(new NameObject("", 1000)).getFrequency();
+        NameObject nameObject = new NameObject(TextUtilCustom.formatToName(palabra), defaultFrequency,true);
+        if(contenidoEnElMail(palabra)){
+            nameObject.setFrequency(nameObject.getFrequency()*1000);
+        }
+        posiblesApellidos.put(palabra.toLowerCase(), nameObject);
+        if (!nameObjectHashSet.isEmpty()) {
+            nameObjectHashSet.add(nameObject);
+            multiplicarFrecuencias(posiblesApellidos, nameObjectHashSet);
+        } else {
+            nameObjectHashSet.add(nameObject);
+        }
+    }
+
+    private boolean listaContiene(HashMap<String, NameObject> lista, String palabra) {
+        return lista.containsKey(palabra.toLowerCase());
     }
 
     private String removeTextSymbol(String palabra) {
         return palabra.replaceAll("[\\r\\n\\t]", "");
     }
 
-    private boolean variablesCompletas() {
-        return apellidoSaved != null && nombreSaved != null && nombreSegundoSaved != null && emailSaved != null && telefonoSaved != null;
-    }
 
     private void buscarTelefono(String palabra) {
         String phoneNumber = PhoneFinder.find(palabra);
@@ -198,43 +268,68 @@ public class UploadFile extends HttpServlet {
         return false;
     }
 
-    private void buscarSegundoNombre(String palabra) {
-        String texto = dataFinder.existeNombre(palabra);
-        if (!TextUtils.isBlank(texto)) {
-            String nombreFormateado = TextUtilCustom.formatToName(texto);
-            if (!nombreFormateado.equals(apellidoSaved)) {
-                this.nombreSegundoSaved = nombreFormateado;
+
+    private boolean buscarNombre(String palabra, HashSet<NameObject> nameObjectHashSet) {
+        NameObject nameObject = dataFinder.existeNombre(palabra);
+        if (nameObject != null) {
+            if(contenidoEnElMail(palabra)){
+                nameObject.setFrequency(nameObject.getFrequency()*1000);
+            }
+            posiblesNombres.put(palabra.toLowerCase(), nameObject);
+            if (!nameObjectHashSet.isEmpty()) {
+                nameObjectHashSet.add(nameObject);
+                multiplicarFrecuencias(posiblesNombres, nameObjectHashSet);
+            } else {
+                nameObjectHashSet.add(nameObject);
             }
         }
+        return nameObject != null;
     }
 
-    private boolean buscarNombre(String palabra) {
-        String texto = dataFinder.existeNombre(palabra);
-        if (!TextUtils.isBlank(texto)) {
-            String nombreFormateado = TextUtilCustom.formatToName(texto);
-            if (!nombreFormateado.equals(apellidoSaved)) {
-                this.nombreSaved = nombreFormateado;
-            }
+    private boolean contenidoEnElMail(String palabra) {
+        if(emailSaved != null && palabra.length() >= 3){
+            return emailSaved.toLowerCase().contains(palabra.toLowerCase());
         }
-        return nombreSaved != null && !nombreSaved.trim().isEmpty();
+        return false;
     }
 
-    private boolean buscarApellido(String palabra) {
-        if (apellidoSaved == null) {
-            String texto = dataFinder.existeApellido(palabra);
-            if (!TextUtils.isBlank(texto)) {
-                String apellidoFormateado = TextUtilCustom.formatToName(texto);
-                if (!apellidoFormateado.equals(nombreSaved) && !apellidoFormateado.equals(nombreSegundoSaved)) {
-                    this.apellidoSaved = apellidoFormateado;
+    private void multiplicarFrecuencias(HashMap<String, NameObject> listaNames, HashSet<NameObject> nameObjectHashSet) {
+        for (NameObject nameObject : listaNames.values()) {
+            if (nameObjectHashSet.contains(nameObject)) {
+                long total = 0;
+                for (NameObject nameIterated : nameObjectHashSet) {
+                    total += nameIterated.getFrequency();
                 }
+                nameObject.setTotal(total * nameObjectHashSet.size());
             }
         }
-        return apellidoSaved != null && !apellidoSaved.trim().isEmpty();
-
     }
 
-    private String[] getLineasFromResult(String resultFromFile) {
-        return resultFromFile.split("[\n\r]");
+    private boolean buscarApellido(String palabra, HashSet<NameObject> nameObjectHashSet, boolean esNombre) {
+        NameObject nameObject = dataFinder.existeApellido(palabra);
+        if (nameObject != null) {
+            if(!esNombre) {
+                nameObject.setFrequency(nameObject.getFrequency() * 1000);
+            }else{
+                nameObject.setFrequency(nameObject.getFrequency() / 1000);
+            }
+            if(contenidoEnElMail(palabra)){
+                nameObject.setFrequency(nameObject.getFrequency()*1000);
+            }
+            posiblesApellidos.put(palabra.toLowerCase(), nameObject);
+            if (!nameObjectHashSet.isEmpty()) {
+                nameObjectHashSet.add(nameObject);
+                multiplicarFrecuencias(posiblesApellidos, nameObjectHashSet);
+            } else {
+                nameObjectHashSet.add(nameObject);
+            }
+        }
+        return nameObject == null;
+    }
+
+    private List<String> getLineasFromResult(String resultFromFile) {
+        String[] split = resultFromFile.split("(<[/]?p[ /]?>)|([\n\r])");
+        return Arrays.stream(split).map(s -> s.replaceAll("<?[/]?p[ /]?>", "").replaceAll("\n","")).collect(Collectors.toList());
     }
 
     private String getTextFromFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
@@ -256,13 +351,16 @@ public class UploadFile extends HttpServlet {
             if (iter.hasNext()) {
                 FileItem item = iter.next();
                 response.setHeader("Content-Type", "text/html");
-                BodyContentHandler handler = new BodyContentHandler();
+                ContentHandler handler = new ToXMLContentHandler();
 
                 AutoDetectParser parser = new AutoDetectParser();
                 Metadata metadata = new Metadata();
                 try (InputStream stream = item.getInputStream()) {
                     parser.parse(stream, handler, metadata);
                     result = handler.toString();
+                    int firstIndex = result.indexOf("class=\"page\"") + 12;
+                    int secondIndex = result.indexOf("</div>", firstIndex);
+                    result = result.substring(firstIndex, secondIndex);
                 }
             }
         } catch (Exception ex) {

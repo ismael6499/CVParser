@@ -1,18 +1,19 @@
 package datasets;
 
 import com.opencsv.CSVReader;
+import utils.TextUtilCustom;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.HashSet;
+import java.util.HashMap;
 
 public class DataFinder {
 
     private static DataFinder instance;
 
-    HashSet<String> apellidos = new HashSet<>();
-    HashSet<String> nombresMasculinos = new HashSet<>();
-    HashSet<String> nombresFemeninos = new HashSet<>();
+    HashMap<String, NameObject> apellidos = new HashMap<>();
+    HashMap<String, NameObject> nombresMasculinos = new HashMap<>();
+    HashMap<String, NameObject> nombresFemeninos = new HashMap<>();
 
     boolean loaded = false;
 
@@ -34,7 +35,9 @@ public class DataFinder {
         try (CSVReader csvReader = new CSVReader(new InputStreamReader(DataFinder.class.getResourceAsStream("/female_names.csv")))) {
             String[] values;
             while ((values = csvReader.readNext()) != null) {
-                nombresFemeninos.add(values[0]);
+                String data = values[0];
+                String value = values[1];
+                nombresFemeninos.put(data, new NameObject(data, value));
             }
         }
     }
@@ -43,7 +46,9 @@ public class DataFinder {
         try (CSVReader csvReader = new CSVReader(new InputStreamReader(DataFinder.class.getResourceAsStream("/male_names.csv")))) {
             String[] values;
             while ((values = csvReader.readNext()) != null) {
-                nombresMasculinos.add(values[0]);
+                String data = values[0];
+                String value = values[1];
+                nombresMasculinos.put(data, new NameObject(data, value));
             }
         }
     }
@@ -53,7 +58,9 @@ public class DataFinder {
         try (CSVReader csvReader = new CSVReader(new InputStreamReader(resourceAsStream))) {
             String[] values;
             while ((values = csvReader.readNext()) != null) {
-                apellidos.add(values[0]);
+                String data = values[0];
+                String value = values[1];
+                apellidos.put(data, new NameObject(data, value));
             }
         }
     }
@@ -69,22 +76,31 @@ public class DataFinder {
     }
 
 
-    public String existeApellido(String palabra) {
+    public NameObject existeApellido(String palabra) {
+        if (palabra.length() < 3) return null;
         palabra = palabra.replaceAll("[^a-zA-ZÀ-ÿ ]", "");
-        if (!apellidos.isEmpty() && apellidos.contains(palabra.toUpperCase())) {
-            return palabra;
+        if (!apellidos.isEmpty() && apellidos.containsKey(palabra.toUpperCase())) {
+            NameObject nameObject = apellidos.get(palabra.toUpperCase());
+            return new NameObject(TextUtilCustom.formatToName(palabra), nameObject.getFrequency());
         }
-        return "";
+        return null;
     }
 
-    public String existeNombre(String palabra) {
+    public NameObject existeNombre(String palabra) {
+        if (palabra.length() < 3) return null;
         palabra = palabra.replaceAll("[^a-zA-ZÀ-ÿ ]", "");
-        boolean encontrado = false;
-        if (!nombresFemeninos.isEmpty()) if (nombresFemeninos.contains(palabra.toUpperCase())) encontrado = true;
-        if (!nombresMasculinos.isEmpty() && !encontrado) encontrado = nombresMasculinos.contains(palabra.toUpperCase());
-        if (encontrado) {
-            return palabra;
+        NameObject nameObject = null;
+        String palabraUpper = palabra.toUpperCase();
+        if (!nombresFemeninos.isEmpty()) {
+            if (nombresFemeninos.containsKey(palabraUpper)) {
+                nameObject = nombresFemeninos.get(palabraUpper);
+            }
         }
-        return "";
+        if (!nombresMasculinos.isEmpty() && nameObject == null)
+            if (nombresMasculinos.containsKey(palabraUpper)) nameObject = nombresMasculinos.get(palabraUpper);
+        if (nameObject != null) {
+            return new NameObject(TextUtilCustom.formatToName(palabra), nameObject.getFrequency());
+        }
+        return null;
     }
 }
