@@ -105,7 +105,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private List<String> limpiarLineasHtml(List<String> lineas) {
-        return lineas.stream().map(s -> s.replaceAll("^<meta name.*/>$","").replaceAll("<[/]?body>","").replaceAll("<[/]?b>","").replaceAll("<img src=.*","")).collect(Collectors.toList());
+        return lineas.stream().map(s -> s.replaceAll("^<meta name.*/>$", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*", "")).collect(Collectors.toList());
     }
 
     private List<String> limpiarLineas(List<String> lineas) {
@@ -117,14 +117,14 @@ public class UploadFile extends HttpServlet {
         for (NameObject nameObject : listaNameObjects.values()) {
             avgFreq += nameObject.getFrequency();
         }
-        if(!listaNameObjects.isEmpty()){
+        if (!listaNameObjects.isEmpty()) {
             avgFreq /= listaNameObjects.size();
         }
         for (String key : listaNameObjects.keySet()) {
             NameObject nameObject = listaNameObjects.get(key);
             if (nameObject.isCreadoDefault()) {
                 nameObject.setFrequency(avgFreq);
-                listaNameObjects.put(key,nameObject);
+                listaNameObjects.put(key, nameObject);
             }
         }
         return listaNameObjects.values().stream().max(Comparator.comparingLong(NameObject::getTotalFrequency)).orElse(new NameObject("", 0)).getData();
@@ -159,7 +159,7 @@ public class UploadFile extends HttpServlet {
             HashSet<NameObject> nameObjectHashSet = new HashSet<>();
             String[] palabras = linea.split("[^\\wÀ-úÀ-ÿ@.#+∙-]");
             for (String palabra : palabras) {
-                if (telefonoSaved == null && !palabra.replaceAll("\\D", "").isEmpty()) {
+                if (isTelefono(linea) || telefonoSaved == null && !palabra.replaceAll("\\D", "").isEmpty() && !ignorarTags(linea) && !esRangoDeAño(palabra)) {
                     String palabraTelefono = Arrays.stream(palabras).reduce("", (s, s2) -> s + s2);
                     buscarTelefono(palabraTelefono);
                 }
@@ -181,13 +181,28 @@ public class UploadFile extends HttpServlet {
         }
     }
 
+    private boolean isTelefono(String linea) {
+        return StringUtils.containsAny(linea.toLowerCase(),"telefono","tel:","cel:","celular");
+    }
+
+    private boolean esRangoDeAño(String palabra) {
+        String textoSoloNumeros = palabra.replaceAll("\\D", "");
+        if (textoSoloNumeros.length() < 8) return true;
+        if (textoSoloNumeros.length() == 8) {
+            String primerRango = textoSoloNumeros.substring(0, 4);
+            String segundoRango = textoSoloNumeros.substring(4);
+            return StringUtils.startsWithAny(primerRango,  "19", "20") &&
+                    StringUtils.startsWithAny(segundoRango,  "19", "20");
+        }
+        return false;
+    }
+
     private boolean contieneSimbolosNombre(String palabra) {
         return !TextUtils.isBlank(palabra.replaceAll("[a-zA-ZÀ-ÿ, ]", ""));
     }
 
     String[] TAGS_IGNORAR = {"de vida", "hoja de vida", "de nacimiento", "fecha de nacimiento",
-            " de identidad", "documento de", "ciudad", "direccion", "estado civil",
-            "19", "20", "año", "mes", "argentina", "colombia", "mexico","salud","instituto","escuela","tecnica","facultad","edificio","universidad","ingles","español","espanol","spanish","english","idioma","lenguaje","language"};
+            " de identidad", "documento de", "ciudad", "direccion", "estado civil", "año", "mes", "argentina", "colombia", "mexico", "salud", "instituto", "escuela", "tecnica", "facultad", "edificio", "universidad", "ingles", "español", "espanol", "spanish", "english", "idioma", "lenguaje", "language", "presente", "|", "dni"};
 
     private boolean ignorarTags(String linea) {
         for (String tag : TAGS_IGNORAR) {
@@ -200,17 +215,17 @@ public class UploadFile extends HttpServlet {
         palabra = quitarLetrasEspeciales(palabra);
         if (buscarNombre(palabra, nameObjectHashSet) && !listaContiene(posiblesApellidos, palabra)) {
             palabras = filtrarTagsNombres(palabras);
-            if(StringUtils.isAllUpperCase(palabra)){
+            if (StringUtils.isAllUpperCase(palabra)) {
                 palabras = Arrays.stream(palabras).filter(s -> StringUtils.isAllUpperCase(s)).toArray(String[]::new);
             }
-            if(palabras.length > 5){
+            if (palabras.length > 5) {
                 palabras = Arrays.stream(palabras).limit(5).toArray(String[]::new);
             }
             for (String palabraIter : palabras) {
                 palabraIter = quitarLetrasEspeciales(palabraIter);
                 if (!palabraIter.equals(palabra)) {
                     boolean esNombre = buscarNombre(palabraIter, nameObjectHashSet) && !listaContiene(posiblesApellidos, palabraIter);
-                    if (buscarApellido(palabraIter, nameObjectHashSet,esNombre)) {
+                    if (buscarApellido(palabraIter, nameObjectHashSet, esNombre)) {
                         if (palabraIter.length() > 3 && !esNombre) {
                             addApellido(palabraIter, nameObjectHashSet);
                         }
@@ -221,7 +236,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private String[] filtrarTagsNombres(String[] palabras) {
-        return Arrays.stream(palabras).filter(s -> !StringUtils.equalsAny(s.toLowerCase(),"nombre","class","apellido","soy","yo","apellidos","nombres") && s.replaceAll("\\D","").isEmpty() && s.length() >= 3 ).toArray(String[]::new);
+        return Arrays.stream(palabras).filter(s -> !StringUtils.equalsAny(s.toLowerCase(), "nombre", "class", "apellido", "soy", "yo", "apellidos", "nombres") && s.replaceAll("\\D", "").isEmpty() && s.length() >= 3).toArray(String[]::new);
     }
 
     private String quitarLetrasEspeciales(String palabra) {
@@ -230,9 +245,9 @@ public class UploadFile extends HttpServlet {
 
     private void addApellido(String palabra, HashSet<NameObject> nameObjectHashSet) {
         long defaultFrequency = nameObjectHashSet.stream().min(Comparator.comparingLong(NameObject::getFrequency)).orElse(new NameObject("", 1000)).getFrequency();
-        NameObject nameObject = new NameObject(TextUtilCustom.formatToName(palabra), defaultFrequency,true);
-        if(contenidoEnElMail(palabra)){
-            nameObject.setFrequency(nameObject.getFrequency()*1000);
+        NameObject nameObject = new NameObject(TextUtilCustom.formatToName(palabra), defaultFrequency, true);
+        if (contenidoEnElMail(palabra)) {
+            nameObject.setFrequency(nameObject.getFrequency() * 1000);
         }
         posiblesApellidos.put(palabra.toLowerCase(), nameObject);
         if (!nameObjectHashSet.isEmpty()) {
@@ -272,8 +287,8 @@ public class UploadFile extends HttpServlet {
     private boolean buscarNombre(String palabra, HashSet<NameObject> nameObjectHashSet) {
         NameObject nameObject = dataFinder.existeNombre(palabra);
         if (nameObject != null) {
-            if(contenidoEnElMail(palabra)){
-                nameObject.setFrequency(nameObject.getFrequency()*1000);
+            if (contenidoEnElMail(palabra)) {
+                nameObject.setFrequency(nameObject.getFrequency() * 1000);
             }
             posiblesNombres.put(palabra.toLowerCase(), nameObject);
             if (!nameObjectHashSet.isEmpty()) {
@@ -287,7 +302,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private boolean contenidoEnElMail(String palabra) {
-        if(emailSaved != null && palabra.length() >= 3){
+        if (emailSaved != null && palabra.length() >= 3) {
             return emailSaved.toLowerCase().contains(palabra.toLowerCase());
         }
         return false;
@@ -308,13 +323,13 @@ public class UploadFile extends HttpServlet {
     private boolean buscarApellido(String palabra, HashSet<NameObject> nameObjectHashSet, boolean esNombre) {
         NameObject nameObject = dataFinder.existeApellido(palabra);
         if (nameObject != null) {
-            if(!esNombre) {
+            if (!esNombre) {
                 nameObject.setFrequency(nameObject.getFrequency() * 1000);
-            }else{
+            } else {
                 nameObject.setFrequency(nameObject.getFrequency() / 1000);
             }
-            if(contenidoEnElMail(palabra)){
-                nameObject.setFrequency(nameObject.getFrequency()*1000);
+            if (contenidoEnElMail(palabra)) {
+                nameObject.setFrequency(nameObject.getFrequency() * 1000);
             }
             posiblesApellidos.put(palabra.toLowerCase(), nameObject);
             if (!nameObjectHashSet.isEmpty()) {
@@ -329,7 +344,7 @@ public class UploadFile extends HttpServlet {
 
     private List<String> getLineasFromResult(String resultFromFile) {
         String[] split = resultFromFile.split("(<[/]?p[ /]?>)|([\n\r])");
-        return Arrays.stream(split).map(s -> s.replaceAll("<?[/]?p[ /]?>", "").replaceAll("\n","")).collect(Collectors.toList());
+        return Arrays.stream(split).map(s -> s.replaceAll("<?[/]?p[ /]?>", "").replaceAll("\n", "")).collect(Collectors.toList());
     }
 
     private String getTextFromFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
