@@ -182,17 +182,17 @@ public class UploadFile extends HttpServlet {
     }
 
     private boolean isTelefono(String linea) {
-        return StringUtils.containsAny(linea.toLowerCase(),"telefono","tel:","cel:","celular");
+        return StringUtils.containsAny(linea.toLowerCase(), "telefono", "tel:", "cel:", "celular");
     }
 
     private boolean esRangoDeAño(String palabra) {
         String textoSoloNumeros = palabra.replaceAll("\\D", "");
-        if (textoSoloNumeros.length() < 8) return true;
+        if (textoSoloNumeros.length() < 8) return false;
         if (textoSoloNumeros.length() == 8) {
             String primerRango = textoSoloNumeros.substring(0, 4);
             String segundoRango = textoSoloNumeros.substring(4);
-            return StringUtils.startsWithAny(primerRango,  "19", "20") &&
-                    StringUtils.startsWithAny(segundoRango,  "19", "20");
+            return StringUtils.startsWithAny(primerRango, "19", "20") &&
+                    StringUtils.startsWithAny(segundoRango, "19", "20");
         }
         return false;
     }
@@ -206,7 +206,9 @@ public class UploadFile extends HttpServlet {
 
     private boolean ignorarTags(String linea) {
         for (String tag : TAGS_IGNORAR) {
-            if (quitarLetrasEspeciales(linea.toLowerCase()).contains(tag)) return true;
+            if (quitarLetrasEspeciales(linea.toLowerCase()).contains(tag)){
+                return true;
+            }
         }
         return false;
     }
@@ -382,5 +384,6 @@ public class UploadFile extends HttpServlet {
         }
         return result;
     }
+
 }
 
