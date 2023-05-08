@@ -5,6 +5,7 @@ Se devuelve un JSON con los campos:
 - nombre
 - email
 - telefono
+- texto
 
 En caso de que alguna de esas propiedades no se encuentren en el archivo entregado, no serán partes del JSON de salida
 
