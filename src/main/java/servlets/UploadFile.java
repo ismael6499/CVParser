@@ -44,6 +44,7 @@ public class UploadFile extends HttpServlet {
         doPost(request, response);
     }
 
+
     @Override
     protected synchronized void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         try {
@@ -83,6 +84,7 @@ public class UploadFile extends HttpServlet {
         List<String> lineas = getLineasFromResult(resultFromFile);
         lineas = limpiarLineas(lineas);
         lineas = limpiarLineasHtml(lineas);
+        String cleanTextToReturn = obtainCleanText(lineas);
         lineas = ordenarLineasPorTags(lineas);
         analizarLineas(palabrasResultado, lineas);
 
@@ -101,11 +103,18 @@ public class UploadFile extends HttpServlet {
         if (!TextUtils.isBlank(emailSaved)) {
             jsonObject.put("email", emailSaved);
         }
+        if(!TextUtils.isBlank(cleanTextToReturn)){
+            jsonObject.put("texto",cleanTextToReturn);
+        }
         response.getWriter().println(jsonObject);
     }
 
+    private String obtainCleanText(List<String> lineas) {
+        return String.join(" ", lineas);
+    }
+
     private List<String> limpiarLineasHtml(List<String> lineas) {
-        return lineas.stream().map(s -> s.replaceAll("^<meta name.*/>$", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*", "")).collect(Collectors.toList());
+        return lineas.stream().map(s -> s.replaceAll("<meta name.*/>", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*", "").replaceAll("<[/]?.*>","").replaceAll("[\n\r\t]", " ")).filter(t -> !TextUtils.isBlank(t)).collect(Collectors.toList());
     }
 
     private List<String> limpiarLineas(List<String> lineas) {
@@ -355,7 +364,6 @@ public class UploadFile extends HttpServlet {
         if (!ServletFileUpload.isMultipartContent(request)) {
             throw new IOException("error multipart request not found");
         }
-
         String result = "";
         try {
             List<FileItem> items = fileUpload.parseRequest(request);
@@ -378,6 +386,8 @@ public class UploadFile extends HttpServlet {
                     int firstIndex = result.indexOf("class=\"page\"") + 12;
                     int secondIndex = result.indexOf("</div>", firstIndex);
                     result = result.substring(firstIndex, secondIndex);
+                }finally {
+                    item.delete();
                 }
             }
         } catch (Exception ex) {
