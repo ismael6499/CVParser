@@ -54,6 +54,7 @@ public class UploadFile extends HttpServlet {
             response.addHeader("Access-Control-Allow-Headers", "Origin");
             response.addHeader("Access-Control-Allow-Headers", "Content-Type");
             response.addHeader("Access-Control-Allow-Headers", "X-Auth-Token");
+            response.addHeader("Content-Type", "application/json; charset=UTF-8" );
             response.addHeader("Access-Control-Max-Age", "86400");
             resetCampos();
             procesar(request, response);
@@ -71,10 +72,12 @@ public class UploadFile extends HttpServlet {
     }
 
     private void procesar(HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
-        String resultFromFile = getTextFromFile(request, response);
+        String[] textArray = getTextFromFile(request, response);
+        String resultFromFile = (String) textArray[0];
         if (TextUtils.isBlank(resultFromFile)) {
             throw new ServletException("No se ha podido analizar el texto del archivo");
         }
+        String fullText = textArray[1];
         dataFinder = DataFinder.getInstance();
 
         if (emailSaved == null) {
@@ -84,7 +87,10 @@ public class UploadFile extends HttpServlet {
         List<String> lineas = getLineasFromResult(resultFromFile);
         lineas = limpiarLineas(lineas);
         lineas = limpiarLineasHtml(lineas);
-        String cleanTextToReturn = obtainCleanText(lineas);
+        List<String> lineasTextoCompleto = getLineasFromResult(fullText);
+        lineasTextoCompleto = limpiarLineas(lineasTextoCompleto);
+        lineasTextoCompleto = limpiarLineasHtml(lineasTextoCompleto);
+        String cleanTextToReturn = obtainCleanText(lineasTextoCompleto);
         lineas = ordenarLineasPorTags(lineas);
         analizarLineas(palabrasResultado, lineas);
 
@@ -114,7 +120,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private List<String> limpiarLineasHtml(List<String> lineas) {
-        return lineas.stream().map(s -> s.replaceAll("<meta name.*/>", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*>", "").replaceAll("<[/]?.*>","").replaceAll("[\n\r\t]", " ").replaceAll("^>","")).filter(t -> !TextUtils.isBlank(t)).collect(Collectors.toList());
+        return lineas.stream().map(s -> s.replaceAll("<meta name.*/>", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*>", "").replaceAll("<[/]?.*>","").replaceAll("[\n\r\t]", " ").replaceAll("[^\\x20-\\x7e]","").replaceAll("^>","")).filter(t -> !TextUtils.isBlank(t)).collect(Collectors.toList());
     }
 
     private List<String> limpiarLineas(List<String> lineas) {
@@ -358,13 +364,14 @@ public class UploadFile extends HttpServlet {
         return Arrays.stream(split).map(s -> s.replaceAll("<?[/]?p[ /]?>", "").replaceAll("\n", "")).collect(Collectors.toList());
     }
 
-    private String getTextFromFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    private String[] getTextFromFile(HttpServletRequest request, HttpServletResponse response) throws IOException {
         FileItemFactory factory = new DiskFileItemFactory();
         ServletFileUpload fileUpload = new ServletFileUpload(factory);
         if (!ServletFileUpload.isMultipartContent(request)) {
             throw new IOException("error multipart request not found");
         }
         String result = "";
+        String fullText = "";
         try {
             List<FileItem> items = fileUpload.parseRequest(request);
             if (items == null) {
@@ -383,6 +390,7 @@ public class UploadFile extends HttpServlet {
                 try (InputStream stream = item.getInputStream()) {
                     parser.parse(stream, handler, metadata);
                     result = handler.toString();
+                    fullText = result+" ";
                     int firstIndex = result.indexOf("class=\"page\"") + 12;
                     int secondIndex = result.indexOf("</div>", firstIndex);
                     result = result.substring(firstIndex, secondIndex);
@@ -392,7 +400,10 @@ public class UploadFile extends HttpServlet {
             }
         } catch (Exception ex) {
         }
-        return result;
+        String[] textArray = new String[2];
+        textArray[0] = result;
+        textArray[1] = fullText;
+        return textArray;
     }
 
 }
