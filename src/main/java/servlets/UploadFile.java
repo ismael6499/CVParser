@@ -120,7 +120,7 @@ public class UploadFile extends HttpServlet {
     }
 
     private List<String> limpiarLineasHtml(List<String> lineas) {
-        return lineas.stream().map(s -> s.replaceAll("<meta name.*/>", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*>", "").replaceAll("<[/]?.*>","").replaceAll("[\n\r\t]", " ").replaceAll("[^\\x20-\\x7e]","").replaceAll("^>","")).filter(t -> !TextUtils.isBlank(t)).collect(Collectors.toList());
+        return lineas.stream().map(s -> s.replaceAll("<meta name.*/>", "").replaceAll("<[/]?body>", "").replaceAll("<[/]?b>", "").replaceAll("<img src=.*>", "").replaceAll("<[/]?.*>","").replaceAll("[\n\r\t]", " ").replace("á","a").replace("é","e").replace("í","i").replace("ó","o").replaceAll("[^\\x20-\\x7e]","").replaceAll("^>","")).filter(t -> !TextUtils.isBlank(t)).collect(Collectors.toList());
     }
 
     private List<String> limpiarLineas(List<String> lineas) {
